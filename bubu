@@ -1,0 +1,108 @@
+
+
+// for i=0;i<10;i++
+//    for j=0;j<100;j++
+//        Here we do 100 loopsteps
+//    if value <= 4.0:
+//        myvalue+=1
+//
+// globalvalue+=myvalue
+
+// or use floats (seems more logical, but no real difference)
+// use linear congression? quadratic? fibonacci?
+
+
+#include <stdio.h>
+#include <cuda.h>
+
+extern "C" {
+   void mandelbrot_row_calc(bool *results, int *nStep_ptr, float *deltaStep_ptr, float *start_x_ptr, float *start_y_ptr, int *mandelSize_ptr);
+   void PrintLastCUDAError();
+}
+
+__global__ void row_calc(unsigned int *dev_Results, float deltaStep, float start_x, float start_y){
+//    __shared__ bool killus;
+   __shared__ unsigned int threadscores[16][16];
+   __syncthreads();
+//    killus = 0;
+   int bx = blockIdx.x;
+   int tx = threadIdx.x;
+   int ty = threadIdx.y;
+   int mandsize = blockDim.x;
+
+   int i,j;
+   int threadscore = 0;
+
+   float xpos = (float)-1.0 + (float)4.0*float(tx - mandsize/2 )/(float)mandsize;
+   float ypos = (float)0.0 + (float)4.0*float(ty - mandsize/2 )/(float)mandsize;
+
+   float a = start_x + deltaStep*(float)bx;
+   float a_tmp;
+   float b = start_y;
+
+   for(i=0;i<20;i++){
+       for(j=0;j<50;j++){
+           a_tmp = a;
+           a = a*a - b*b + xpos;
+           b = (float)2*a_tmp*b + ypos;
+       }
+       if ((a*a + b*b) <= (float)4.0){
+           threadscore += i*i;
+       }
+   }
+   threadscores[tx][ty] = threadscore;
+   //    if ((a*a + b*b) <= (float)4.0){ // we found a white pix
+   ////        dev_Results[bx] = 1;
+   //        foundwhite = 1; // share this info
+   //    }
+   __syncthreads();
+
+   if (tx == 0 && ty == 0 ){ // only 1 thread in the block will write
+       threadscore = 0;
+       for (i=0;i<mandsize;i++){
+           for (j=0;j<mandsize;j++){
+               threadscore +=threadscores[i][j];
+           }
+       }
+       dev_Results[bx] = threadscore; // the result to global_mem
+   }
+   return;
+}
+
+
+
+// Call this to print out the CUDA error status. To check if GPU stuff worked correctly,
+// this should be called after a synchronous function (like a normal memory copy).
+void PrintLastCUDAError(){
+   cudaError_t err = cudaGetLastError();
+   printf(cudaGetErrorString( err ));
+   printf("\n");
+}
+
+
+
+void mandelbrot_row_calc(int *nStep_ptr, float *deltaStep_ptr, float *start_x_ptr, float *start_y_ptr, int *mandelSize_ptr, unsigned int *results) {
+   int nStep = *nStep_ptr;
+   int mandelSize = *mandelSize_ptr;
+   float deltaStep = *deltaStep_ptr;
+   float start_x = *start_x_ptr;
+   float start_y = *start_y_ptr;
+
+   unsigned int *dev_Results;
+   cudaMalloc( (void**)&dev_Results, nStep * sizeof(unsigned int) );
+   cudaMemset( dev_Results, 0, nStep * sizeof(unsigned int));
+
+//    PrintLastCUDAError();
+
+           // define the launch dimensions
+   dim3    threads(mandelSize,mandelSize); // size of the cuda-blocks
+   dim3    grid(nStep);
+
+   // run the kernel
+   row_calc<<<grid,threads>>>(dev_Results, deltaStep, start_x, start_y);
+   cudaMemcpy( results, dev_Results, nStep * sizeof(unsigned int), cudaMemcpyDeviceToHost );
+   cudaFree( dev_Results );
+//    PrintLastCUDAError();
+   return;
+}
+
