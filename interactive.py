@@ -1,5 +1,6 @@
 import pygame
 import mandel
+import numpy
 
 class FractalView(object):
     def __init__(self, pixel_size, center, extent):
@@ -50,7 +51,6 @@ class FractalView(object):
             row_pixels = mandel.get_row(self._pixel_size[0],delta, first_pixel_pos[0], first_pixel_pos[1], 10)
             all_values.append(row_pixels)
             max_value = max(max_value, max(row_pixels))
-            print first_pixel_pos, delta
             for column,pixel in enumerate(row_pixels):
                 if pixel > 0:
                     pixelarray[column][row] = (255,255,255)
@@ -68,15 +68,16 @@ class FractalView(object):
         return ( float(pixel_pos[0] - self._pixel_size[0]/2)/self._pixel_size[0] * self._extent[0] + self._center[0],
                  float(- pixel_pos[1] + self._pixel_size[1]/2)/self._pixel_size[1] * self._extent[1] + self._center[1])
     def _plot_mandelbrot(self, numerical_pos):
-        #pixels = mandel.mandelbrot()
+        pixels = mandel.mandelbrot(numerical_pos[0], numerical_pos[1], 200)
+        max_score = max(pixels)+1
+        pixel_colors = map(int, tuple(255*numpy.array(pixels)/float(max_score)))
         pixelarray=pygame.PixelArray(self._screen)
-        pixels = (100*abs(numerical_pos[0]),) * 100
-        print pixels
-        for row in xrange(10):
-            for column in xrange(10):
-                pixelarray[self._pixel_size[0]-10+column][row] = ( pixels[column + row * 10], )*3
+        for row in xrange(200):
+            for column in xrange(200):
+
+                pixelarray[self._pixel_size[0]-200+column][row] = ( pixel_colors[column + row * 200], )*3
         
         pygame.display.flip()
                
-f=FractalView(pixel_size = [70,70], center=(0.0,0.0), extent=(4.0, 4.0))
+f=FractalView(pixel_size = [500,500], center=(0.0,0.0), extent=(4.0, 3.0))
 f.main_loop() 
